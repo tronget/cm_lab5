@@ -105,7 +105,7 @@ def newton_finite(x, xs, ys):
     return y_f, table_fin, form
 
 
-def stirling_interpolate(x0, xs, ys):
+def stirling_interpolate(x, xs, ys):
     equal, h = is_equally_spaced(xs)
     if not equal:
         raise ValueError("Стирлинг работает только при равном шаге")
@@ -113,14 +113,12 @@ def stirling_interpolate(x0, xs, ys):
     table_fin = finite_differences(ys)
     n = len(xs) - 1
     alpha = n // 2
-    t = (x0 - xs[alpha]) / h
-
+    t = (x - xs[alpha]) / h
     s1 = ys[alpha]
     s2 = ys[alpha]
-
-    prod1 = 1.0
-    prod2 = 1.0
-    fact = 1.0
+    prod1 = 1
+    prod2 = 1
+    fact = 1
 
     shifts = [0]
     for i in range(1, n + 1):
@@ -162,25 +160,25 @@ def bessel_interpolate(x, xs, ys):
     even_coeff = t * (t - 1) / 2
     odd_coeff = (t - 0.5) * t * (t - 1) / 6
 
-    r = 1
+    order = 1
     while True:
-        k_even = 2 * r
-        k_odd = k_even + 1
-        if k_even < len(table_fin):
-            i_left = m - r
+        i_even = 2 * order
+        i_odd = i_even + 1
+        if i_even < len(table_fin):
+            i_left = m - order
             i_right = i_left + 1
-            if 0 <= i_left and i_right < len(table_fin[k_even]):
-                y += even_coeff * (table_fin[k_even][i_left] + table_fin[k_even][i_right]) / 2
-        if k_odd < len(table_fin):
-            idx = m - r
-            if 0 <= idx < len(table_fin[k_odd]):
-                y += odd_coeff * table_fin[k_odd][idx]
+            if 0 <= i_left and i_right < len(table_fin[i_even]):
+                y += even_coeff * (table_fin[i_even][i_left] + table_fin[i_even][i_right]) / 2
+        if i_odd < len(table_fin):
+            idx = m - order
+            if 0 <= idx < len(table_fin[i_odd]):
+                y += odd_coeff * table_fin[i_odd][idx]
 
-        if (k_even >= len(table_fin) and k_odd >= len(table_fin)) or m - r - 1 < 0:
+        if (i_even >= len(table_fin) and i_odd >= len(table_fin)) or m - order - 1 < 0:
             break
 
-        even_coeff *= (t + r) * (t - r - 1) / ((2 * r + 2) * (2 * r + 1))
-        odd_coeff *= (t + r) * (t - r - 1) / ((2 * r + 3) * (2 * r + 2))
-        r += 1
+        even_coeff *= (t + order) * (t - order - 1) / ((2 * order + 2) * (2 * order + 1))
+        odd_coeff *= (t + order) * (t - order - 1) / ((2 * order + 3) * (2 * order + 2))
+        order += 1
 
     return y, table_fin
