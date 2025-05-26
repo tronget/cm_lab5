@@ -6,9 +6,9 @@ from matplotlib.figure import Figure
 
 from functions import BUILTIN_FUNCTIONS
 
-from util import load_csv
+from util import load_csv, sort_together
 
-from methods import lagrange_interpolate, newton_finite, newton_divided
+from methods import lagrange_interpolate, newton_finite, newton_divided, stirling_interpolate, bessel_interpolate
 
 
 class NodeTableModel(QtCore.QAbstractTableModel):
@@ -91,11 +91,10 @@ class InterpolationWindow(QtWidgets.QMainWindow):
         v_data = QtWidgets.QVBoxLayout(tab_data)
 
         self.radio_manual = QtWidgets.QRadioButton("Таблица с клавиатуры")
-        self.radio_file = QtWidgets.QRadioButton("CSV‑файл …")
         self.radio_func = QtWidgets.QRadioButton("Аналитическая функция")
         self.radio_manual.setChecked(True)
-        for rb in (self.radio_manual, self.radio_file, self.radio_func):
-            v_data.addWidget(rb)
+        v_data.addWidget(self.radio_manual)
+        v_data.addWidget(self.radio_func)
 
         # таблица узлов
         tv = QtWidgets.QTableView()
@@ -138,8 +137,10 @@ class InterpolationWindow(QtWidgets.QMainWindow):
         self.chk_lagr = QtWidgets.QCheckBox("Полином Лагранжа")
         self.chk_div = QtWidgets.QCheckBox("Полином Ньютона (разделённые)")
         self.chk_fin = QtWidgets.QCheckBox("Полином Ньютона (конечные)")
+        self.chk_stirling = QtWidgets.QCheckBox("Схема Стирлинга")
+        self.chk_bessel = QtWidgets.QCheckBox("Схема Бесселя")
         self.chk_lagr.setChecked(True)
-        for c in (self.chk_lagr, self.chk_div, self.chk_fin):
+        for c in (self.chk_lagr, self.chk_div, self.chk_fin, self.chk_stirling, self.chk_bessel):
             v_par.addWidget(c)
 
         h_x0 = QtWidgets.QHBoxLayout()
@@ -178,7 +179,7 @@ class InterpolationWindow(QtWidgets.QMainWindow):
             self.model.endRemoveRows()
 
     def _load_csv_dialog(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "CSV …", "", "CSV (*.csv)")
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "CSV …", "", "All files (*)")
         if not path:
             return
         try:
@@ -189,7 +190,6 @@ class InterpolationWindow(QtWidgets.QMainWindow):
         self.model.beginResetModel()
         self.model.xs, self.model.ys = xs, ys
         self.model.endResetModel()
-        self.radio_file.setChecked(True)
 
     def _show_finite_table(self, xs: List[float], ys: List[float], table: List[List[float]]):
         n = len(xs)
@@ -229,6 +229,11 @@ class InterpolationWindow(QtWidgets.QMainWindow):
             self.model.beginResetModel()
             self.model.xs, self.model.ys = xs, ys
             self.model.endResetModel()
+        else:
+            xs, ys = sort_together(self.model.xs, self.model.ys)
+            self.model.beginResetModel()
+            self.model.xs, self.model.ys = xs, ys
+            self.model.endResetModel()
         return self.model.xs, self.model.ys
 
     def _compute(self):
@@ -247,17 +252,20 @@ class InterpolationWindow(QtWidgets.QMainWindow):
             return
 
         results, curves = [], []
+        res_value = None
         self.finite_table.hide()
 
         # Лагранж -----------------------------------------------------------
         if self.chk_lagr.isChecked():
             y_l = lagrange_interpolate(x0, xs, ys)
+            res_value = y_l
             results.append(f"Лагранж: y({x0}) ≈ {y_l:.10g}")
             curves.append(("Лагранж", lambda t, xs=xs, ys=ys: lagrange_interpolate(t, xs, ys)))
 
         # Ньютон / разделённые ---------------------------------------------
         if self.chk_div.isChecked():
             y_d, tbl_d = newton_divided(x0, xs, ys)
+            res_value = y_d
             results.append(f"Ньютон (разделённые): y({x0}) ≈ {y_d:.10g}")
             curves.append(("Ньютон (разделённые)", lambda t, xs=xs, ys=ys: newton_divided(t, xs, ys)[0]))
 
@@ -265,12 +273,35 @@ class InterpolationWindow(QtWidgets.QMainWindow):
         if self.chk_fin.isChecked():
             try:
                 y_f, table_fin, form = newton_finite(x0, xs, ys)
+                res_value = y_f
                 results.append(f"Ньютон (конечные, {form}): y({x0}) ≈ {y_f:.10g}")
                 curves.append((f"Ньютон конечные ({form})", lambda t, xs=xs, ys=ys, f=form: (
                     newton_finite(t, xs, ys)[0])))
                 self._show_finite_table(xs, ys, table_fin)
             except ValueError:
                 results.append("⚠ Ньютон (конечные): узлы неравномерны, пропуск…")
+
+        if self.chk_stirling.isChecked():
+            try:
+                y_s, table_fin = stirling_interpolate(x0, xs, ys)
+                if not res_value:
+                    res_value = y_s
+                results.append(f"Стирлинг: y({x0}) ≈ {y_s:.10g}")
+                curves.append((f"Стирлинг", lambda t, xs=xs, ys=ys: stirling_interpolate(t, xs, ys)[0]))
+                self._show_finite_table(xs, ys, table_fin)
+            except ValueError:
+                results.append("⚠ Стирлинг: узлы неравномерны, пропуск…")
+
+        if self.chk_bessel.isChecked():
+            try:
+                y_s, table_fin = bessel_interpolate(x0, xs, ys)
+                if not res_value:
+                    res_value = y_s
+                results.append(f"Бессель: y({x0}) ≈ {y_s:.10g}")
+                curves.append((f"Бессель", lambda t, xs=xs, ys=ys: bessel_interpolate(t, xs, ys)[0]))
+                self._show_finite_table(xs, ys, table_fin)
+            except ValueError:
+                results.append("⚠ Бессель: узлы неравномерны, пропуск…")
 
         self.results_edit.setPlainText("\n".join(results))
 
@@ -284,11 +315,12 @@ class InterpolationWindow(QtWidgets.QMainWindow):
             f = BUILTIN_FUNCTIONS[self.func_combo.currentText()]
             xx = self._linspace(min(xs), max(xs), 200)
             ax.plot(xx, [f(t) for t in xx], label="f(x)")
-        colors = ["red", "green", "blue", "orange"]
+        colors = ["orange", "green", "blue", "pink", "purple"]
         for i, (lbl, fn) in enumerate(curves):
             xx = self._linspace(min(xs), max(xs), 400)
             ax.plot(xx, [fn(t) for t in xx], label=lbl, linewidth=1.1, color=colors[i % len(colors)])
         ax.legend(loc="best")
+        ax.scatter([x0], [res_value], color="red", label="точка")
         self.canvas.draw()
 
     @staticmethod
